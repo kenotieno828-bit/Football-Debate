@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Football Debate</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
+body{background:#0d0f12;color:#fff;padding-bottom:75px}
+header{position:sticky;top:0;z-index:5;background:#12161b;border-bottom:1px solid #252b32;padding:16px;text-align:center}
+header h1{font-size:22px}.green{color:#21d36b}
+.container{max-width:650px;margin:auto;padding:14px}
+.card{background:#171b20;border:1px solid #252b32;border-radius:16px;padding:18px;margin-bottom:14px}
+.question{font-size:18px;font-weight:700;margin-bottom:15px}
+.options{display:flex;gap:10px}.option{flex:1;background:#232930;border-radius:12px;padding:14px;text-align:center}
+.option h3{font-size:16px;margin-bottom:10px}
+button{border:0;border-radius:9px;padding:10px 13px;background:#21d36b;color:#07120b;font-weight:700;cursor:pointer}
+button:active{transform:scale(.98)}button.secondary{background:#2a3037;color:#fff}
+button.danger{background:#c94040;color:#fff}
+.results{margin-top:15px}.row{display:flex;justify-content:space-between;font-size:13px;margin:7px 0}
+.bar{height:10px;background:#30363d;border-radius:20px;overflow:hidden}.fill{height:100%;background:#21d36b;width:50%}
+.comment{display:flex;gap:8px;margin-top:15px}.comment input{flex:1}
+input{width:100%;padding:11px;border:1px solid #30363d;background:#0f1215;color:#fff;border-radius:9px;margin:5px 0}
+.add{margin-bottom:20px}.empty{text-align:center;color:#9299a1;padding:30px}
+nav{position:fixed;bottom:0;left:0;right:0;background:#15191e;border-top:1px solid #292f36;display:flex;justify-content:space-around;padding:10px;z-index:10}
+nav button{background:transparent;color:#bbb;padding:8px 18px}nav button.active{color:#21d36b}
+.small{color:#8e969f;font-size:12px;margin-top:8px}.actions{display:flex;gap:8px;margin-top:12px}
+h2{font-size:18px;margin-bottom:8px}
+#toast{position:fixed;bottom:85px;left:50%;transform:translateX(-50%);background:#fff;color:#111;padding:10px 15px;border-radius:10px;display:none;z-index:20}
+</style>
+</head>
+<body>
+<header><h1>⚽ <span class="green">Football</span> Debate</h1></header>
+
+<main class="container">
+<section id="home">
+  <div class="card add">
+    <h2>Create a Debate</h2>
+    <input id="q" placeholder="e.g. Who is the better player?">
+    <div class="options">
+      <input id="a" placeholder="Option 1">
+      <input id="b" placeholder="Option 2">
+    </div>
+    <button onclick="createDebate()">Post Debate</button>
+  </div>
+  <div id="feed"></div>
+</section>
+
+<section id="trending" style="display:none">
+  <div class="card"><h2>🔥 Trending</h2><p class="small">Debates with the most votes appear here.</p></div>
+  <div id="trendFeed"></div>
+</section>
+
+<section id="profile" style="display:none">
+  <div class="card">
+    <h2>👤 My Profile</h2>
+    <input id="username" placeholder="Enter your username">
+    <button onclick="saveUser()">Save Username</button>
+    <p class="small" id="profileStats"></p>
+  </div>
+</section>
+</main>
+
+<nav>
+<button id="homeBtn" class="active" onclick="showPage('home')">🏠 Home</button>
+<button id="trendBtn" onclick="showPage('trending')">🔥 Trending</button>
+<button id="profileBtn" onclick="showPage('profile')">👤 Profile</button>
+</nav>
+<div id="toast"></div>
+
+<script>
+const starter=[
+ {id:1,q:"Who is the better player?",a:"🐐 Messi",b:"🐐 Ronaldo",av:50,bv:50,comments:[]},
+ {id:2,q:"Who is the better striker?",a:"🔥 Haaland",b:"⚡ Mbappé",av:50,bv:50,comments:[]},
+ {id:3,q:"Which club is bigger?",a:"🔴 Man United",b:"🔵 Man City",av:50,bv:50,comments:[]}
+];
+let debates=JSON.parse(localStorage.getItem("footballDebates")||"null")||starter;
+let user=localStorage.getItem("footballUser")||"";
+
+function save(){localStorage.setItem("footballDebates",JSON.stringify(debates))}
+function toast(t){let x=document.getElementById("toast");x.textContent=t;x.style.display="block";setTimeout(()=>x.style.display="none",1500)}
+function total(d){return d.av+d.bv}
+function percent(v,d){return Math.round(v/total(d)*100)}
+function card(d){
+ return `<div class="card">
+   <div class="question">${escapeHtml(d.q)}</div>
+   <div class="options">
+    <div class="option"><h3>${escapeHtml(d.a)}</h3><button onclick="vote(${d.id},'a')">Vote</button></div>
+    <div class="option"><h3>${escapeHtml(d.b)}</h3><button onclick="vote(${d.id},'b')">Vote</button></div>
+   </div>
+   <div class="results">
+    <div class="row"><span>${escapeHtml(d.a)}</span><b>${percent(d.av,d)}%</b></div>
+    <div class="bar"><div class="fill" style="width:${percent(d.av,d)}%"></div></div>
+    <div class="row"><span>${escapeHtml(d.b)}</span><b>${percent(d.bv,d)}%</b></div>
+   </div>
+   <div class="actions"><button class="secondary" onclick="commentPrompt(${d.id})">💬 Comment</button><button class="danger" onclick="removeDebate(${d.id})">Delete</button></div>
+   <div class="small">${total(d)} total votes · ${d.comments.length} comments</div>
+   ${d.comments.slice(-3).map(c=>`<p class="small">💬 <b>${escapeHtml(c.name)}</b>: ${escapeHtml(c.text)}</p>`).join("")}
+ </div>`;
+}
+function render(){
+ document.getElementById("feed").innerHTML=debates.map(card).join("")||'<div class="empty">No debates yet.</div>';
+ document.getElementById("trendFeed").innerHTML=[...debates].sort((x,y)=>total(y)-total(x)).map(card).join("")||'<div class="empty">No debates yet.</div>';
+ document.getElementById("username").value=user;
+ document.getElementById("profileStats").textContent=`${debates.length} debates available`;
+}
+function vote(id,side){
+ let d=debates.find(x=>x.id===id); if(!d)return;
+ let key="voted_"+id;
+ if(localStorage.getItem(key)){toast("You already voted on this debate.");return}
+ d[side==="a"?"av":"bv"]++;localStorage.setItem(key,"1");save();render();toast("Vote counted! ⚽");
+}
+function createDebate(){
+ let q=document.getElementById("q").value.trim(),a=document.getElementById("a").value.trim(),b=document.getElementById("b").value.trim();
+ if(!q||!a||!b){toast("Fill in all fields.");return}
+ debates.unshift({id:Date.now(),q,a,b,av:0,bv:0,comments:[]});
+ document.getElementById("q").value=document.getElementById("a").value=document.getElementById("b").value="";
+ save();render();toast("Debate posted!");
+}
+function commentPrompt(id){
+ let text=prompt("Write your comment:");
+ if(!text)return;
+ let name=user||"Football Fan",d=debates.find(x=>x.id===id);
+ d.comments.push({name,text});save();render();toast("Comment added!");
+}
+function removeDebate(id){if(confirm("Delete this debate?")){debates=debates.filter(d=>d.id!==id);save();render()}}
+function saveUser(){user=document.getElementById("username").value.trim()||"Football Fan";localStorage.setItem("footballUser",user);toast("Username saved!")}
+function showPage(page){
+ ["home","trending","profile"].forEach(x=>document.getElementById(x).style.display=x===page?"block":"none");
+ ["homeBtn","trendBtn","profileBtn"].forEach(x=>document.getElementById(x).classList.remove("active"));
+ document.getElementById(page==="home"?"homeBtn":page==="trending"?"trendBtn":"profileBtn").classList.add("active");
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+render();
+</script>
+</body>
+</html>
